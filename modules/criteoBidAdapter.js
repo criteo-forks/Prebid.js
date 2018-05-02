@@ -9,7 +9,7 @@ var events = require('src/events');
 const ADAPTER_VERSION = 4;
 const BIDDER_CODE = 'criteo';
 const CDB_ENDPOINT = '//bidder.criteo.com/cdb';
-const CRITEO_VENDOR_ID = 1; // /!\ TODO update the vendor Id to the real vendor id once registered in IAB vendor register
+const CRITEO_VENDOR_ID = 91;
 const INTEGRATION_MODES = {
   'amp': 1,
 };
