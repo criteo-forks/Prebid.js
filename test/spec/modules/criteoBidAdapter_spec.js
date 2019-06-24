@@ -5,10 +5,29 @@ import CONSTANTS from 'src/constants.json';
 import * as utils from 'src/utils';
 
 describe('The Criteo bidding adapter', function () {
+  let xhr;
+  let requests;
+
   beforeEach(function () {
     // Remove FastBid to avoid side effects.
     localStorage.removeItem('criteo_fast_bid');
+
+    // Setup Fake XHR to auto respond a 204 from CDB
+    xhr = sinon.useFakeXMLHttpRequest();
+    requests = [];
+    xhr.onCreate = request => { 
+      requests.push(request);
+
+      request.onSend = () => {
+        request.respond(204, {}, ""); 
+      };
+    };
   });
+
+  this.afterEach(function() {
+    xhr.restore();
+  });
+  
   describe('isBidRequestValid', function () {
     it('should return false when given an invalid bid', function () {
       const bid = {
@@ -78,10 +97,12 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(request => {
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
+        expect(requests).to.have.length(1);
+        const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
         expect(request.method).to.equal('POST');
-        const ortbRequest = request.data;
+        const ortbRequest = JSON.parse(request.requestBody);
         expect(ortbRequest.publisher.url).to.equal(utils.getTopWindowUrl());
         expect(ortbRequest.slots).to.have.lengthOf(1);
         expect(ortbRequest.slots[0].impid).to.equal('bid-123');
@@ -120,10 +141,12 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(request => {
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+        expect(requests).to.have.length(1);
+        const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
         expect(request.method).to.equal('POST');
-        const ortbRequest = request.data;
+        const ortbRequest = JSON.parse(request.requestBody);
         expect(ortbRequest.publisher.url).to.equal(utils.getTopWindowUrl());
         expect(ortbRequest.publisher.networkid).to.equal(456);
         expect(ortbRequest.slots).to.have.lengthOf(1);
@@ -161,10 +184,12 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(request => {
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+        expect(requests).to.have.length(1);
+        const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
         expect(request.method).to.equal('POST');
-        const ortbRequest = request.data;
+        const ortbRequest = JSON.parse(request.requestBody);
         expect(ortbRequest.publisher.url).to.equal(utils.getTopWindowUrl());
         expect(ortbRequest.publisher.networkid).to.equal(456);
         expect(ortbRequest.slots).to.have.lengthOf(2);
@@ -199,8 +224,10 @@ describe('The Criteo bidding adapter', function () {
         },
       };
 
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(request => {
-        const ortbRequest = request.data;
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+        expect(requests).to.have.length(1);
+        const request = requests[0];
+        const ortbRequest = JSON.parse(request.requestBody);
         expect(ortbRequest.gdprConsent.consentData).to.equal(undefined);
         expect(ortbRequest.gdprConsent.gdprApplies).to.equal(undefined);
         expect(ortbRequest.gdprConsent.consentGiven).to.equal(undefined);
