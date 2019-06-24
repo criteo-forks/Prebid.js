@@ -3,6 +3,7 @@ import { registerBidder } from '../src/adapters/bidderFactory';
 import { parse } from '../src/url';
 import * as utils from '../src/utils';
 import find from 'core-js/library/fn/array/find';
+import { ajax } from '../src/ajax';
 
 const ADAPTER_VERSION = 17;
 const BIDDER_CODE = 'criteo';
@@ -67,7 +68,31 @@ export const spec = {
       })
       .then(_ => {
         let cdbRequest = buildRequest(bidRequests, bidderRequest);
-        return callCdbWithXhr(cdbRequest.url, cdbRequest.data);
+
+        return new Promise(function (resolve, reject) {
+          ajax(
+            cdbRequest.url,
+            {
+              success: function(responseText, _) {
+                try {
+                  resolve(JSON.parse(responseText));
+                } catch (e) {
+                  // Doesn't matter if not response
+                  resolve();
+                }
+              },
+              error: function(statusText, _) {
+                reject(new Error(statusText));
+              }
+            },
+            JSON.stringify(cdbRequest.data),
+            {
+              method: 'POST',
+              contentType: 'text/plain',
+              withCredentials: true
+            }
+          );
+        });
       })
       .catch(error => {
         console.error('Unable to call criteo, error is', error);
@@ -153,37 +178,6 @@ export const spec = {
     }
   },
 };
-
-/**
- * Call cdb bidding request with XHR
- *
- * @param {string} url
- * @param {object} data
- */
-function callCdbWithXhr(url, data) {
-  return new Promise(function (resolve, reject) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-    xhr.onload = function () {
-      if (this.status >= 200 && this.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.response));
-        } catch (e) {
-          // Doesn't matter if not response
-          resolve();
-        }
-      } else {
-        reject(new Error(xhr.statusText));
-      }
-    };
-    xhr.onerror = function () {
-      reject(new Error(xhr.statusText));
-    };
-    xhr.withCredentials = true;
-    xhr.setRequestHeader('Content-Type', 'text/plain');
-    xhr.send(JSON.stringify(data));
-  });
-}
 
 /**
  * @return {boolean}
