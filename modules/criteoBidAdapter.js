@@ -331,7 +331,7 @@ function createNativeAd(id, payload, callback) {
   </script>`;
 }
 
-function str2ab(str) {
+export function str2ab(str) {
   var buf = new ArrayBuffer(str.length);
   var bufView = new Uint8Array(buf);
   for (var i = 0; i < str.length; ++i) {
@@ -347,7 +347,7 @@ function str2ab(str) {
  * @param {string} code
  * @returns Promise<boolean> if fastbid is valid
  */
-function cryptoVerifyAsync(key, hash, code) {
+export function cryptoVerifyAsync(key, hash, code) {
   // Standard
   var standardSubtle = window.crypto && (window.crypto.subtle || window.crypto.webkitSubtle);
   var algo = { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };

@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { cryptoVerify, spec, FAST_BID_PUBKEY } from 'modules/criteoBidAdapter';
+import { cryptoVerifyAsync, str2ab, spec, FAST_BID_PUBKEY } from 'modules/criteoBidAdapter';
 import { createBid } from 'src/bidfactory';
 import CONSTANTS from 'src/constants.json';
 import * as utils from 'src/utils';
@@ -15,19 +15,19 @@ describe('The Criteo bidding adapter', function () {
     // Setup Fake XHR to auto respond a 204 from CDB
     xhr = sinon.useFakeXMLHttpRequest();
     requests = [];
-    xhr.onCreate = request => { 
+    xhr.onCreate = request => {
       requests.push(request);
 
       request.onSend = () => {
-        request.respond(204, {}, ""); 
+        request.respond(204, {}, '');
       };
     };
   });
 
-  this.afterEach(function() {
+  afterEach(function() {
     xhr.restore();
   });
-  
+
   describe('isBidRequestValid', function () {
     it('should return false when given an invalid bid', function () {
       const bid = {
@@ -141,7 +141,7 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
@@ -184,7 +184,7 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
@@ -224,7 +224,7 @@ describe('The Criteo bidding adapter', function () {
         },
       };
 
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {        
+      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         const ortbRequest = JSON.parse(request.requestBody);
@@ -373,20 +373,220 @@ describe('The Criteo bidding adapter', function () {
     });
   });
 
-  describe('cryptoVerify', function () {
+  describe('cryptoVerifyAsync', function () {
     const TEST_HASH = 'vBeD8Q7GU6lypFbzB07W8hLGj7NL+p7dI9ro2tCxkrmyv0F6stNuoNd75Us33iNKfEoW+cFWypelr6OJPXxki2MXWatRhJuUJZMcK4VBFnxi3Ro+3a0xEfxE4jJm4eGe98iC898M+/YFHfp+fEPEnS6pEyw124ONIFZFrcejpHU=';
+    const ALGO = { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
 
-    it('should verify right signature', function () {
-      expect(cryptoVerify(FAST_BID_PUBKEY, TEST_HASH, 'test')).to.equal(true);
+    var propertiesToRestore;
+
+    // sinon version installed by dev-deps doesn't support the replaceGetter for objects like window
+    // and upgrading to the latest sinon generates a tons of warning accross all modules
+    function replaceWindowProperty(propertyName, replacement) {
+      var tmpObject = {}
+      tmpObject[propertyName] = window[propertyName];
+      propertiesToRestore = { ...propertiesToRestore, ...tmpObject };
+
+      Object.defineProperty(window, propertyName, {
+        get: function () { return replacement; },
+        configurable: true
+      });
+    }
+
+    beforeEach(function() {
+      propertiesToRestore = {};
     });
 
-    it('should verify wrong signature', function () {
-      expect(cryptoVerify(FAST_BID_PUBKEY, TEST_HASH, 'test wrong')).to.equal(false);
+    afterEach(function() {
+      for (var property in propertiesToRestore) {
+        if (propertiesToRestore.hasOwnProperty(property)) {
+          Object.defineProperty(window, property, {
+            get: function () { return propertiesToRestore[property]; }
+          });
+        }
+      }
+    });
+
+    it('should reject with an error when running on a browser that exposes window.crypto.subtle and importKey call failed', function () {
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
+
+      subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.reject(new Error('failure')));
+      subtleMock.expects('verify').never();
+
+      replaceWindowProperty('crypto', { subtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        subtleMock.verify();
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.crypto.subtle and verify failed', function () {
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
+
+      var cryptoKey = 'abc';
+
+      subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.reject(new Error('failure')));
+
+      replaceWindowProperty('crypto', { subtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        subtleMock.verify();
+        done();
+      });
+    });
+
+    it('should resolve when running on a browser that exposes window.crypto.subtle and all goes successfully', function () {
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
+
+      var cryptoKey = 'abc';
+
+      subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.resolve('ok'));
+
+      replaceWindowProperty('crypto', { subtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(result => {
+        result.should.be('string', 'ok');
+        subtleMock.verify();
+        done();
+      }).catch(_ => {
+        expect.fail(null, null, 'cryptoVerifyAsync reject with an error');
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.crypto.webkitSubtle and importKey call failed', function () {
+      var webkitSubtle = { importKey: function() {}, verify: function() {} };
+      var webkitSubtleMock = sinon.mock(webkitSubtle);
+
+      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.reject(new Error('failure')));
+      webkitSubtleMock.expects('verify').never();
+
+      replaceWindowProperty('crypto', { webkitSubtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        webkitSubtleMock.verify();
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.crypto.webkitSubtle and verify failed', function () {
+      var webkitSubtle = { importKey: function() {}, verify: function() {} };
+      var webkitSubtleMock = sinon.mock(webkitSubtle);
+
+      var cryptoKey = 'abc';
+
+      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.reject(new Error('failure')));
+
+      replaceWindowProperty('crypto', { webkitSubtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        webkitSubtleMock.verify();
+        done();
+      });
+    });
+
+    it('should resolve when running on a browser that exposes window.crypto.webkitSubtle and all goes successfully', function () {
+      var webkitSubtle = { importKey: function() {}, verify: function() {} };
+      var webkitSubtleMock = sinon.mock(webkitSubtle);
+
+      var cryptoKey = 'abc';
+
+      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.resolve('ok'));
+
+      replaceWindowProperty('crypto', { webkitSubtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(result => {
+        result.should.be('string', 'ok');
+        webkitSubtleMock.verify();
+        done();
+      }).catch(_ => {
+        expect.fail(null, null, 'cryptoVerifyAsync reject with an error');
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.msCrypto and importKey failed', function () {
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
+
+      subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.reject(new Error('failure')));
+      subtleMock.expects('verify').never();
+
+      replaceWindowProperty('msCrypto', { subtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        subtleMock.verify();
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.msCrypto and verify failed', function () {
+      var webkitSubtle = { importKey: function() {}, verify: function() {} };
+      var webkitSubtleMock = sinon.mock(webkitSubtle);
+
+      var cryptoKey = 'abc';
+
+      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.reject(new Error('failure')));
+
+      replaceWindowProperty('msCrypto', { webkitSubtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        webkitSubtleMock.verify();
+        done();
+      });
+    });
+
+    it('should resolve when running on a browser that exposes window.msCrypto and all goes successfully', function () {
+      var webkitSubtle = { importKey: function() {}, verify: function() {} };
+      var webkitSubtleMock = sinon.mock(webkitSubtle);
+
+      var cryptoKey = 'abc';
+
+      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
+      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.resolve('ok'));
+
+      replaceWindowProperty('msCrypto', { webkitSubtle });
+
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(result => {
+        result.should.be('string', 'ok');
+        webkitSubtleMock.verify();
+        done();
+      }).catch(_ => {
+        expect.fail(null, null, 'cryptoVerifyAsync reject with an error');
+        done();
+      });
     });
 
     it('should return undefined with incompatible browsers', function () {
-      // Here use a null hash to make the call to crypto library fail and simulate a browser failure
-      expect(cryptoVerify(FAST_BID_PUBKEY, null, 'test')).to.be.false;
+      replaceWindowProperty('crypto', undefined);
+      replaceWindowProperty('msCrypto', undefined);
+      expect(cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test')).to.be.undefined;
     });
   });
 });
