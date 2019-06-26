@@ -528,7 +528,30 @@ describe('The Criteo bidding adapter', function () {
       var subtle = { importKey: function() {}, verify: function() {} };
       var subtleMock = sinon.mock(subtle);
 
-      subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.reject(new Error('failure')));
+      var importKeyOperation = { };
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
+      subtleMock.expects('verify').never();
+
+      replaceWindowProperty('msCrypto', { subtle });
+
+      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test');
+
+      importKeyOperation.onerror(new Error("failure"));
+      
+      promise.then(x => {
+        expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
+        done();
+      }).catch(_ => {
+        subtleMock.verify();
+        done();
+      });
+    });
+
+    it('should reject with an error when running on a browser that exposes window.msCrypto but throws an exception', function () {
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
+
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().throwsException();
       subtleMock.expects('verify').never();
 
       replaceWindowProperty('msCrypto', { subtle });
@@ -543,39 +566,65 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should reject with an error when running on a browser that exposes window.msCrypto and verify failed', function () {
-      var webkitSubtle = { importKey: function() {}, verify: function() {} };
-      var webkitSubtleMock = sinon.mock(webkitSubtle);
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
 
       var cryptoKey = 'abc';
 
-      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
-      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.reject(new Error('failure')));
+      var importKeyOperation = { };
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
+      var verifyOperation = { };
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperation);
 
-      replaceWindowProperty('msCrypto', { webkitSubtle });
+      replaceWindowProperty('msCrypto', { subtle });
 
-      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(x => {
+      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong');
+
+      importKeyOperation.oncomplete({
+        target : {
+          result: cryptoKey
+        }
+      });
+      verifyOperation.onerror(new Error("failure"));
+
+      promise.then(x => {
         expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
         done();
       }).catch(_ => {
-        webkitSubtleMock.verify();
+        subtleMock.verify();
         done();
       });
     });
 
     it('should resolve when running on a browser that exposes window.msCrypto and all goes successfully', function () {
-      var webkitSubtle = { importKey: function() {}, verify: function() {} };
-      var webkitSubtleMock = sinon.mock(webkitSubtle);
+      var subtle = { importKey: function() {}, verify: function() {} };
+      var subtleMock = sinon.mock(subtle);
 
       var cryptoKey = 'abc';
 
-      webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
-      webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(Promise.resolve('ok'));
+      var importKeyOperation = { };
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
+      var verifyOperation = { };
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperation);
 
-      replaceWindowProperty('msCrypto', { webkitSubtle });
+      replaceWindowProperty('msCrypto', { subtle });
 
-      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(result => {
+      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong');
+      
+      importKeyOperation.oncomplete({
+        target : {
+          result: cryptoKey
+        }
+      });
+      verifyOperation.oncomplete({
+        target : {
+          result: "ok"
+        }
+      });
+
+      promise.then(result => {
         result.should.be('string', 'ok');
-        webkitSubtleMock.verify();
+        subtleMock.verify();
         done();
       }).catch(_ => {
         expect.fail(null, null, 'cryptoVerifyAsync reject with an error');
