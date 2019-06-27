@@ -341,7 +341,7 @@ export function str2ab(str) {
  * @param {string} code
  * @returns Promise<boolean> if fastbid is valid
  */
-export function cryptoVerifyAsync(key, hash, code) {
+function cryptoVerifyAsync(key, hash, code) {
   // Standard
   var standardSubtle = window.crypto && (window.crypto.subtle || window.crypto.webkitSubtle);
   var algo = { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
@@ -386,7 +386,7 @@ function validateFastBid(fastBid) {
   const firstLine = fastBid.substr(0, firstLineEnd).trim();
   if (firstLine.substr(0, 9) !== '// Hash: ') {
     utils.logWarn('No hash found in FastBid');
-    return false;
+    return undefined;
   }
 
   // Remove the hash part from the locally stored value
@@ -405,7 +405,7 @@ function validateFastBid(fastBid) {
 /**
  * @return {Promise<boolean>}
  */
-function tryGetCriteoFastBid() {
+export function tryGetCriteoFastBid() {
   try {
     const fastBid = localStorage.getItem('criteo_fast_bid');
     if (fastBid !== null) {
