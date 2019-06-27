@@ -528,20 +528,23 @@ describe('The Criteo bidding adapter', function () {
       var subtle = { importKey: function() {}, verify: function() {} };
       var subtleMock = sinon.mock(subtle);
 
-      var importKeyOperation = { };
-      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
+      var importKeyOperationProxy = new Proxy({ }, {
+        set: (_, property, value) => {
+          if(property == "onerror") {
+            value(new Error("failure"));
+          }
+          return true;
+        }
+      });
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperationProxy);
       subtleMock.expects('verify').never();
 
       replaceWindowProperty('msCrypto', { subtle });
 
-      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test');
-
-      importKeyOperation.onerror(new Error("failure"));
-      
-      promise.then(x => {
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test').then(x => {
         expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
         done();
-      }).catch(_ => {
+      }).catch(e => {
         subtleMock.verify();
         done();
       });
@@ -571,26 +574,35 @@ describe('The Criteo bidding adapter', function () {
 
       var cryptoKey = 'abc';
 
-      var importKeyOperation = { };
-      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
-      var verifyOperation = { };
-      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperation);
+      var importKeyOperationProxy = new Proxy({ }, {
+        set: (_, property, value) => {
+          if(property == "oncomplete") {
+            value({
+              target : {
+                result: cryptoKey
+              }
+            });
+          }
+          return true;
+        }
+      });
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperationProxy);
+      var verifyOperationProxy = new Proxy({ }, {
+        set: (_, property, value) => {
+          if(property == "onerror") {
+            value(new Error("failure"));
+          }
+          return true;
+        }
+      });
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperationProxy);
 
       replaceWindowProperty('msCrypto', { subtle });
 
-      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong');
-
-      importKeyOperation.oncomplete({
-        target : {
-          result: cryptoKey
-        }
-      });
-      verifyOperation.onerror(new Error("failure"));
-
-      promise.then(x => {
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(x => {
         expect.fail(null, null, 'cryptoVerifyAsync did not reject with an error');
         done();
-      }).catch(_ => {
+      }).catch(e => {
         subtleMock.verify();
         done();
       });
@@ -602,27 +614,36 @@ describe('The Criteo bidding adapter', function () {
 
       var cryptoKey = 'abc';
 
-      var importKeyOperation = { };
-      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperation);
-      var verifyOperation = { };
-      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperation);
+      var importKeyOperationProxy = new Proxy({ }, {
+        set: (_, property, value) => {
+          if(property == "oncomplete") {
+            value({
+              target : {
+                result: cryptoKey
+              }
+            });
+          }
+          return true;
+        }
+      });
+      subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperationProxy);
+      var verifyOperationProxy = new Proxy({ }, {
+        set: (_, property, value) => {
+          if(property == "oncomplete") {
+            value({
+              target : {
+                result: "ok"
+              }
+            });
+          }
+          return true;
+        }
+      });
+      subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab('test wrong')).once().returns(verifyOperationProxy);
 
       replaceWindowProperty('msCrypto', { subtle });
 
-      var promise = cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong');
-      
-      importKeyOperation.oncomplete({
-        target : {
-          result: cryptoKey
-        }
-      });
-      verifyOperation.oncomplete({
-        target : {
-          result: "ok"
-        }
-      });
-
-      promise.then(result => {
+      cryptoVerifyAsync(FAST_BID_PUBKEY, TEST_HASH, 'test wrong').then(result => {
         result.should.be('string', 'ok');
         subtleMock.verify();
         done();
