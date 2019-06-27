@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { tryGetCriteoFastBid, str2ab, spec, FAST_BID_PUBKEY } from 'modules/criteoBidAdapter';
+import { tryGetCriteoFastBid, str2ab, spec, FAST_BID_PUBKEY, PROFILE_ID_PUBLISHERTAG, ADAPTER_VERSION } from 'modules/criteoBidAdapter';
 import { createBid } from 'src/bidfactory';
 import CONSTANTS from 'src/constants.json';
 import * as utils from 'src/utils';
@@ -233,6 +233,133 @@ describe('The Criteo bidding adapter', function () {
         expect(ortbRequest.gdprConsent.consentGiven).to.equal(undefined);
         done();
       });
+    });
+  });
+
+  describe('when pubtag prebid adapter is available', function () {
+    afterEach(function() {
+      global.Criteo = undefined;
+    });
+
+    it('should forward response to pubtag when calling interpretResponse', () => {
+      const response = {};
+      const request = {};
+
+      const adapter = { interpretResponse: function() {} };
+      const adapterMock = sinon.mock(adapter);
+      adapterMock.expects('interpretResponse').withExactArgs(response, request).once().returns('ok');
+      const prebidAdapter = { GetAdapter: function() {} };
+      const prebidAdapterMock = sinon.mock(prebidAdapter);
+      prebidAdapterMock.expects('GetAdapter').withExactArgs(request).once().returns(adapter);
+
+      global.Criteo = {
+        PubTag: {
+          Adapters: {
+            Prebid: prebidAdapter
+          }
+        }
+      };
+
+      expect(spec.interpretResponse(response, request)).equal('ok');
+      adapterMock.verify();
+      prebidAdapterMock.verify();
+    });
+
+    it('should forward bid to pubtag when calling onBidWon', () => {
+      const bid = { auctionId: 123 };
+
+      const adapter = { handleBidWon: function() {} };
+      const adapterMock = sinon.mock(adapter);
+      adapterMock.expects('handleBidWon').withExactArgs(bid).once();
+      const prebidAdapter = { GetAdapter: function() {} };
+      const prebidAdapterMock = sinon.mock(prebidAdapter);
+      prebidAdapterMock.expects('GetAdapter').withExactArgs(bid.auctionId).once().returns(adapter);
+
+      global.Criteo = {
+        PubTag: {
+          Adapters: {
+            Prebid: prebidAdapter
+          }
+        }
+      };
+
+      spec.onBidWon(bid);
+      adapterMock.verify();
+      prebidAdapterMock.verify();
+    });
+
+    it('should forward bid to pubtag when calling onSetTargeting', () => {
+      const bid = { auctionId: 123 };
+
+      const adapter = { handleSetTargeting: function() {} };
+      const adapterMock = sinon.mock(adapter);
+      adapterMock.expects('handleSetTargeting').withExactArgs(bid).once();
+      const prebidAdapter = { GetAdapter: function() {} };
+      const prebidAdapterMock = sinon.mock(prebidAdapter);
+      prebidAdapterMock.expects('GetAdapter').withExactArgs(bid.auctionId).once().returns(adapter);
+
+      global.Criteo = {
+        PubTag: {
+          Adapters: {
+            Prebid: prebidAdapter
+          }
+        }
+      };
+
+      spec.onSetTargeting(bid);
+      adapterMock.verify();
+      prebidAdapterMock.verify();
+    });
+
+    it('should forward bid to pubtag when calling onTimeout', () => {
+      const timeoutData = { auctionId: 123 };
+
+      const adapter = { handleBidTimeout: function() {} };
+      const adapterMock = sinon.mock(adapter);
+      adapterMock.expects('handleBidTimeout').once();
+      const prebidAdapter = { GetAdapter: function() {} };
+      const prebidAdapterMock = sinon.mock(prebidAdapter);
+      prebidAdapterMock.expects('GetAdapter').withExactArgs(timeoutData.auctionId).once().returns(adapter);
+
+      global.Criteo = {
+        PubTag: {
+          Adapters: {
+            Prebid: prebidAdapter
+          }
+        }
+      };
+
+      spec.onTimeout(timeoutData);
+      adapterMock.verify();
+      prebidAdapterMock.verify();
+    });
+
+    it('should directly return a POST method instead of a PROMISE when calling buildRequests', () => {
+      const bidRequests = { };
+      const bidderRequest = { };
+
+      const prebidAdapter = { buildCdbUrl: function() {}, buildCdbRequest: function() {} };
+      const prebidAdapterMock = sinon.mock(prebidAdapter);
+      prebidAdapterMock.expects('buildCdbUrl').once().returns('cdbUrl');
+      prebidAdapterMock.expects('buildCdbRequest').once().returns('cdbRequest');
+
+      const adapters = { Prebid: function() {} };
+      const adaptersMock = sinon.mock(adapters);
+      adaptersMock.expects('Prebid').withExactArgs(PROFILE_ID_PUBLISHERTAG, ADAPTER_VERSION, bidRequests, bidderRequest, '$prebid.version$').once().returns(prebidAdapter);
+
+      global.Criteo = {
+        PubTag: {
+          Adapters: adapters
+        }
+      };
+      
+      const buildRequestsResult = spec.buildRequests(bidRequests, bidderRequest);
+      expect(buildRequestsResult.method).equal('POST');
+      expect(buildRequestsResult.url).equal('cdbUrl');
+      expect(buildRequestsResult.data).equal('cdbRequest');
+
+      adaptersMock.verify();
+      prebidAdapterMock.verify();
     });
   });
 

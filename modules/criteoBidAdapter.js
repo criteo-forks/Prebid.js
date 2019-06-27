@@ -5,7 +5,7 @@ import * as utils from '../src/utils';
 import find from 'core-js/library/fn/array/find';
 import { ajax } from '../src/ajax';
 
-const ADAPTER_VERSION = 17;
+export const ADAPTER_VERSION = 17;
 const BIDDER_CODE = 'criteo';
 const CDB_ENDPOINT = '//bidder.criteo.com/cdb';
 const CRITEO_VENDOR_ID = 91;
@@ -13,7 +13,7 @@ const INTEGRATION_MODES = {
   'amp': 1,
 };
 const PROFILE_ID_INLINE = 207;
-const PROFILE_ID_PUBLISHERTAG = 185;
+export const PROFILE_ID_PUBLISHERTAG = 185;
 
 // Unminified source code can be found in: https://github.com/Prebid-org/prebid-js-external-js-criteo/blob/master/dist/prod.js
 const PUBLISHER_TAG_URL = '//static.criteo.net/js/ld/publishertag.prebid.js';
