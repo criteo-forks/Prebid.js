@@ -7,10 +7,28 @@ import * as utils from 'src/utils';
 describe('The Criteo bidding adapter', function () {
   let xhr;
   let requests;
+  let propertiesToRestore;
+  let localStorageMock;
+  let consoleMock;
+
+  // sinon version installed by dev-deps doesn't support the replaceGetter for objects like window
+  // and upgrading to the latest sinon generates a tons of warning accross all modules
+  function replaceWindowProperty(propertyName, replacement) {
+    let tmpObject = {}
+    tmpObject[propertyName] = window[propertyName];
+    propertiesToRestore = { ...propertiesToRestore, ...tmpObject };
+
+    Object.defineProperty(window, propertyName, {
+      get: function () { return replacement; },
+      configurable: true
+    });
+  }
 
   beforeEach(function () {
-    // Remove FastBid to avoid side effects.
-    localStorage.removeItem('criteo_fast_bid');
+    global.Criteo = undefined;
+    localStorageMock = sinon.mock(localStorage);
+    consoleMock = sinon.mock(console);
+    propertiesToRestore = {};
 
     // Setup Fake XHR to auto respond a 204 from CDB
     xhr = sinon.useFakeXMLHttpRequest();
@@ -26,6 +44,15 @@ describe('The Criteo bidding adapter', function () {
 
   afterEach(function() {
     xhr.restore();
+    localStorageMock.restore();
+    consoleMock.restore();
+    for (let property in propertiesToRestore) {
+      if (propertiesToRestore.hasOwnProperty(property)) {
+        Object.defineProperty(window, property, {
+          get: function () { return propertiesToRestore[property]; }
+        });
+      }
+    }
   });
 
   describe('isBidRequestValid', function () {
@@ -85,7 +112,7 @@ describe('The Criteo bidding adapter', function () {
       },
     };
 
-    it('should properly build a zoneId request', function (done) {
+    it('should catch and log into console when xhr failed', () => {
       const bidRequests = [
         {
           bidder: 'criteo',
@@ -97,7 +124,37 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
+
+      xhr.onCreate = request => {
+        request.onSend = () => {
+          request.respond(404, {}, '');
+        };
+      };
+
+      consoleMock.expects('error').withExactArgs('Unable to call criteo, error is', sinon.match.any).once();
+
+      return spec.buildRequests(bidRequests, bidderRequest).promise.then(result => {
+        expect(result).to.be.undefined;
+        consoleMock.verify();
+      });
+    });
+
+    it('should properly build a zoneId request', () => {
+      const bidRequests = [
+        {
+          bidder: 'criteo',
+          adUnitCode: 'bid-123',
+          transactionId: 'transaction-123',
+          sizes: [[728, 90]],
+          params: {
+            zoneId: 123,
+            publisherSubId: '123',
+            nativeCallback: function() {}
+          },
+        },
+      ];
+
+      return spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
@@ -106,6 +163,8 @@ describe('The Criteo bidding adapter', function () {
         expect(ortbRequest.publisher.url).to.equal(utils.getTopWindowUrl());
         expect(ortbRequest.slots).to.have.lengthOf(1);
         expect(ortbRequest.slots[0].impid).to.equal('bid-123');
+        expect(ortbRequest.slots[0].publishersubid).to.equal('123');
+        expect(ortbRequest.slots[0].native).to.equal(true);
         expect(ortbRequest.slots[0].transactionid).to.equal('transaction-123');
         expect(ortbRequest.slots[0].sizes).to.have.lengthOf(1);
         expect(ortbRequest.slots[0].sizes[0]).to.equal('728x90');
@@ -113,11 +172,10 @@ describe('The Criteo bidding adapter', function () {
         expect(ortbRequest.gdprConsent.consentData).to.equal('concentDataString');
         expect(ortbRequest.gdprConsent.gdprApplies).to.equal(true);
         expect(ortbRequest.gdprConsent.consentGiven).to.equal(true);
-        done();
       });
     });
 
-    it('should properly build a networkId request', function (done) {
+    it('should properly build a networkId request', () => {
       const bidderRequest = {
         timeout: 3000,
         gdprConsent: {
@@ -141,7 +199,8 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
+
+      return spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
@@ -158,11 +217,10 @@ describe('The Criteo bidding adapter', function () {
         expect(ortbRequest.gdprConsent.consentData).to.equal(undefined);
         expect(ortbRequest.gdprConsent.gdprApplies).to.equal(false);
         expect(ortbRequest.gdprConsent.consentGiven).to.equal(undefined);
-        done();
       });
     });
 
-    it('should properly build a mixed request', function (done) {
+    it('should properly build a mixed request', () => {
       const bidderRequest = { timeout: 3000 };
       const bidRequests = [
         {
@@ -184,7 +242,8 @@ describe('The Criteo bidding adapter', function () {
           },
         },
       ];
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
+
+      return spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         expect(request.url).to.match(/^\/\/bidder\.criteo\.com\/cdb\?profileId=207&av=\d+&wv=[^&]+&cb=\d/);
@@ -203,11 +262,10 @@ describe('The Criteo bidding adapter', function () {
         expect(ortbRequest.slots[1].sizes[0]).to.equal('300x250');
         expect(ortbRequest.slots[1].sizes[1]).to.equal('728x90');
         expect(ortbRequest.gdprConsent).to.equal(undefined);
-        done();
       });
     });
 
-    it('should properly build request with undefined gdpr consent fields when they are not provided', function (done) {
+    it('should properly build request with undefined gdpr consent fields when they are not provided', () => {
       const bidRequests = [
         {
           bidder: 'criteo',
@@ -224,23 +282,18 @@ describe('The Criteo bidding adapter', function () {
         },
       };
 
-      spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
+      return spec.buildRequests(bidRequests, bidderRequest).promise.then(_ => {
         expect(requests).to.have.length(1);
         const request = requests[0];
         const ortbRequest = JSON.parse(request.requestBody);
         expect(ortbRequest.gdprConsent.consentData).to.equal(undefined);
         expect(ortbRequest.gdprConsent.gdprApplies).to.equal(undefined);
         expect(ortbRequest.gdprConsent.consentGiven).to.equal(undefined);
-        done();
       });
     });
   });
 
   describe('when pubtag prebid adapter is available', function () {
-    afterEach(function() {
-      global.Criteo = undefined;
-    });
-
     it('should forward response to pubtag when calling interpretResponse', () => {
       const response = {};
       const request = {};
@@ -352,7 +405,7 @@ describe('The Criteo bidding adapter', function () {
           Adapters: adapters
         }
       };
-      
+
       const buildRequestsResult = spec.buildRequests(bidRequests, bidderRequest);
       expect(buildRequestsResult.method).equal('POST');
       expect(buildRequestsResult.url).equal('cdbUrl');
@@ -504,45 +557,13 @@ describe('The Criteo bidding adapter', function () {
     const TEST_HASH = 'azerty';
     const ALGO = { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
 
-    var propertiesToRestore;
-    var localStorageMock;
-
-    // sinon version installed by dev-deps doesn't support the replaceGetter for objects like window
-    // and upgrading to the latest sinon generates a tons of warning accross all modules
-    function replaceWindowProperty(propertyName, replacement) {
-      var tmpObject = {}
-      tmpObject[propertyName] = window[propertyName];
-      propertiesToRestore = { ...propertiesToRestore, ...tmpObject };
-
-      Object.defineProperty(window, propertyName, {
-        get: function () { return replacement; },
-        configurable: true
-      });
-    }
-
-    beforeEach(function() {
-      localStorageMock = sinon.mock(localStorage);
-      propertiesToRestore = {};
-    });
-
-    afterEach(function() {
-      localStorageMock.restore();
-      for (var property in propertiesToRestore) {
-        if (propertiesToRestore.hasOwnProperty(property)) {
-          Object.defineProperty(window, property, {
-            get: function () { return propertiesToRestore[property]; }
-          });
-        }
-      }
-    });
-
     it('should fail silently and return undefined if hash line is missing or corrupted', () => {
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Has');
       expect(tryGetCriteoFastBid()).to.be.undefined;
     });
 
     it('should fail silently and return undefined if browser does not support any subtle api', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
       replaceWindowProperty('crypto', undefined);
@@ -551,11 +572,11 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should fail silently and return undefined if cryptoVerifyAsync call throw an exception', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
       replaceWindowProperty('crypto', { subtle });
       subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().throwsException();
 
@@ -563,20 +584,20 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should be able to successfully load, validate and then execute the fast bid script when running on a browser that supports crypto.subtle', () => {
-      var publisherTag = 'window.ensureEvalCalled.mark();';
+      let publisherTag = 'window.ensureEvalCalled.mark();';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
       replaceWindowProperty('crypto', { subtle });
 
-      var cryptoKey = 'cryptoKey';
+      let cryptoKey = 'cryptoKey';
       subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
       subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab(publisherTag)).once().returns(Promise.resolve('ok'));
 
-      var ensureEvalCalled = { mark: function() {} };
-      var ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
+      let ensureEvalCalled = { mark: function() {} };
+      let ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
       replaceWindowProperty('ensureEvalCalled', ensureEvalCalled);
       ensureEvalCalledMock.expects('mark').once();
 
@@ -588,11 +609,11 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should return promise that ends with an undefined result when running on a browser that supports crypto.subtle and importKey call failed', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
       subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.reject(new Error('failure')));
       subtleMock.expects('verify').never();
@@ -606,13 +627,13 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should return promise that ends with an undefined result when running on a browser that supports crypto.subtle and verify call failed', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
-      var cryptoKey = 'cryptoKey';
+      let cryptoKey = 'cryptoKey';
       subtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
       subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab(publisherTag)).once().returns(Promise.reject(new Error('failure')));
 
@@ -625,20 +646,20 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should be able to successfully load, validate and then execute the fast bid script when running on a browser that supports crypto.webkitSubtle', () => {
-      var publisherTag = 'window.ensureEvalCalled.mark();';
+      let publisherTag = 'window.ensureEvalCalled.mark();';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var webkitSubtle = { importKey: function() {}, verify: function() {} };
-      var webkitSubtleMock = sinon.mock(webkitSubtle);
+      let webkitSubtle = { importKey: function() {}, verify: function() {} };
+      let webkitSubtleMock = sinon.mock(webkitSubtle);
 
       replaceWindowProperty('crypto', { webkitSubtle });
 
-      var cryptoKey = 'cryptoKey';
+      let cryptoKey = 'cryptoKey';
       webkitSubtleMock.expects('importKey').withExactArgs('jwk', FAST_BID_PUBKEY, ALGO, false, ['verify']).once().returns(Promise.resolve(cryptoKey));
       webkitSubtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab(publisherTag)).once().returns(Promise.resolve('ok'));
 
-      var ensureEvalCalled = { mark: function() {} };
-      var ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
+      let ensureEvalCalled = { mark: function() {} };
+      let ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
       replaceWindowProperty('ensureEvalCalled', ensureEvalCalled);
       ensureEvalCalledMock.expects('mark').once();
 
@@ -650,13 +671,13 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should return promise that ends with an undefined result when running on a browser that supports crypto.msCrypto and importKey call failed', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
-      var importKeyOperationProxy = new Proxy({ }, {
+      let importKeyOperationProxy = new Proxy({ }, {
         set: (_, property, value) => {
           if (property == 'onerror') {
             value(new Error('failure'));
@@ -676,11 +697,11 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should return promise that ends with an undefined result when running on a browser that supports crypto.msCrypto an exception is thrown by one of its method', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
       subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().throwsException();
       subtleMock.expects('verify').never();
@@ -694,15 +715,15 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should return promise that ends with an undefined result when running on a browser that supports crypto.msCrypto and verify call failed', () => {
-      var publisherTag = '';
+      let publisherTag = '';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
-      var cryptoKey = 'abc';
+      let cryptoKey = 'abc';
 
-      var importKeyOperationProxy = new Proxy({ }, {
+      let importKeyOperationProxy = new Proxy({ }, {
         set: (_, property, value) => {
           if (property == 'oncomplete') {
             value({
@@ -715,7 +736,7 @@ describe('The Criteo bidding adapter', function () {
         }
       });
       subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperationProxy);
-      var verifyOperationProxy = new Proxy({ }, {
+      let verifyOperationProxy = new Proxy({ }, {
         set: (_, property, value) => {
           if (property == 'onerror') {
             value(new Error('failure'));
@@ -734,17 +755,17 @@ describe('The Criteo bidding adapter', function () {
     });
 
     it('should be able to successfully load, validate and then execute the fast bid script when running on a browser that supports window.msCrypto', () => {
-      var publisherTag = 'window.ensureEvalCalled.mark();';
+      let publisherTag = 'window.ensureEvalCalled.mark();';
       localStorageMock.expects('getItem').withExactArgs('criteo_fast_bid').once().returns('// Hash: ' + TEST_HASH + '\n' + publisherTag);
 
-      var subtle = { importKey: function() {}, verify: function() {} };
-      var subtleMock = sinon.mock(subtle);
+      let subtle = { importKey: function() {}, verify: function() {} };
+      let subtleMock = sinon.mock(subtle);
 
       replaceWindowProperty('msCrypto', { subtle });
 
-      var cryptoKey = 'abc';
+      let cryptoKey = 'abc';
 
-      var importKeyOperationProxy = new Proxy({ }, {
+      let importKeyOperationProxy = new Proxy({ }, {
         set: (_, property, value) => {
           if (property == 'oncomplete') {
             value({
@@ -757,7 +778,7 @@ describe('The Criteo bidding adapter', function () {
         }
       });
       subtleMock.expects('importKey').withExactArgs('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY)), ALGO, false, ['verify']).once().returns(importKeyOperationProxy);
-      var verifyOperationProxy = new Proxy({ }, {
+      let verifyOperationProxy = new Proxy({ }, {
         set: (_, property, value) => {
           if (property == 'oncomplete') {
             value({
@@ -771,8 +792,8 @@ describe('The Criteo bidding adapter', function () {
       });
       subtleMock.expects('verify').withExactArgs(ALGO, cryptoKey, str2ab(atob(TEST_HASH)), str2ab(publisherTag)).once().returns(verifyOperationProxy);
 
-      var ensureEvalCalled = { mark: function() {} };
-      var ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
+      let ensureEvalCalled = { mark: function() {} };
+      let ensureEvalCalledMock = sinon.mock(ensureEvalCalled);
       replaceWindowProperty('ensureEvalCalled', ensureEvalCalled);
       ensureEvalCalledMock.expects('mark').once();
 

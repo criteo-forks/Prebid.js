@@ -63,9 +63,6 @@ export const spec = {
     }
 
     callCdbPromise = loadFastBidPromise
-      .catch(error => {
-        console.error('Unable to try get criteo fast bid, error is', error);
-      })
       .then(_ => {
         let cdbRequest = buildRequest(bidRequests, bidderRequest);
 
@@ -349,8 +346,7 @@ function cryptoVerifyAsync(key, hash, code) {
     return standardSubtle.importKey('jwk', key, algo, false, ['verify']).then(
       function (cryptoKey) {
         return standardSubtle.verify(algo, cryptoKey, str2ab(atob(hash)), str2ab(code));
-      },
-      function (_) { }
+      }
     );
   }
 
