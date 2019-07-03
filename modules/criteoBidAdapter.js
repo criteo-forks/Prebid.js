@@ -19,20 +19,14 @@ export const PROFILE_ID_PUBLISHERTAG = 185;
 // Unminified source code can be found in: https://github.com/Prebid-org/prebid-js-external-js-criteo/blob/master/dist/prod.js
 const PUBLISHER_TAG_URL = '//static.criteo.net/js/ld/publishertag.prebid.js';
 
-export const FAST_BID_PUBKEY = {
-  kty: 'RSA',
-  n: 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
-  e: 'AQAB',
-  alg: 'RS256',
-  ext: 'true'
-};
-
 export const FAST_BID_PUBKEY_IE11 = {
   kty: 'RSA',
   n: 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
   e: 'AQAB',
   alg: 'RS256'
 };
+
+export const FAST_BID_PUBKEY = Object.assign({}, FAST_BID_PUBKEY_IE11, { ext: 'true' });
 
 /** @type {BidderSpec} */
 export const spec = {
