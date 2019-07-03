@@ -23,7 +23,7 @@ export const FAST_BID_PUBKEY = {
   'n': 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
   'e': 'AQAB',
   'alg': 'RS256',
-  'use': 'sig'
+  'ext': 'true'
 };
 
 /** @type {BidderSpec} */
