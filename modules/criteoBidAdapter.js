@@ -4,6 +4,7 @@ import { parse } from '../src/url';
 import * as utils from '../src/utils';
 import find from 'core-js/library/fn/array/find';
 import { ajax } from '../src/ajax';
+import Promise from 'promise-polyfill';
 
 export const ADAPTER_VERSION = 17;
 const BIDDER_CODE = 'criteo';
@@ -19,11 +20,18 @@ export const PROFILE_ID_PUBLISHERTAG = 185;
 const PUBLISHER_TAG_URL = '//static.criteo.net/js/ld/publishertag.prebid.js';
 
 export const FAST_BID_PUBKEY = {
-  'kty': 'RSA',
-  'n': 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
-  'e': 'AQAB',
-  'alg': 'RS256',
-  'ext': 'true'
+  kty: 'RSA',
+  n: 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
+  e: 'AQAB',
+  alg: 'RS256',
+  ext: 'true'
+};
+
+export const FAST_BID_PUBKEY_IE11 = {
+  kty: 'RSA',
+  n: 'ztQYwCE5BU7T9CDM5he6rKoabstXRmkzx54zFPZkWbK530dwtLBDeaWBMxHBUT55CYyboR_EZ4efghPi3CoNGfGWezpjko9P6p2EwGArtHEeS4slhu_SpSIFMjG6fdrpRoNuIAMhq1Z-Pr_-HOd1pThFKeGFr2_NhtAg-TXAzaU',
+  e: 'AQAB',
+  alg: 'RS256'
 };
 
 /** @type {BidderSpec} */
@@ -108,7 +116,7 @@ export const spec = {
    * @return {Bid[]}
    */
   interpretResponse: (response, request) => {
-    const body = response.body || response;
+    const body = response !== undefined ? (response.body || response) : undefined;
 
     if (publisherTagAvailable()) {
       const adapter = Criteo.PubTag.Adapters.Prebid.GetAdapter(request);
@@ -334,17 +342,16 @@ export function str2ab(str) {
 
 /**
  * Verify fastBid with cryto.subtle
- * @param {string} key
  * @param {string} hash
  * @param {string} code
  * @returns Promise<boolean> if fastbid is valid
  */
-function cryptoVerifyAsync(key, hash, code) {
+function cryptoVerifyAsync(hash, code) {
   // Standard
   var standardSubtle = window.crypto && (window.crypto.subtle || window.crypto.webkitSubtle);
   var algo = { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
   if (standardSubtle) {
-    return standardSubtle.importKey('jwk', key, algo, false, ['verify']).then(
+    return standardSubtle.importKey('jwk', FAST_BID_PUBKEY, algo, false, ['verify']).then(
       function (cryptoKey) {
         return standardSubtle.verify(algo, cryptoKey, str2ab(atob(hash)), str2ab(code));
       }
@@ -355,7 +362,7 @@ function cryptoVerifyAsync(key, hash, code) {
   if (window.msCrypto) {
     return new Promise(function (resolve, reject) {
       try {
-        var eImport = window.msCrypto.subtle.importKey('jwk', str2ab(JSON.stringify(key)), algo, false, ['verify']);
+        var eImport = window.msCrypto.subtle.importKey('jwk', str2ab(JSON.stringify(FAST_BID_PUBKEY_IE11)), algo, false, ['verify']);
         eImport.onerror = function (evt) { reject(evt) };
         eImport.oncomplete = function (evtKey) {
           var cryptoKey = evtKey.target.result;
@@ -392,7 +399,7 @@ function validateFastBid(fastBid) {
 
   // Verify the hash using cryptography
   try {
-    return cryptoVerifyAsync(FAST_BID_PUBKEY, fileEncryptedHash, publisherTag);
+    return cryptoVerifyAsync(fileEncryptedHash, publisherTag);
   } catch (e) {
     utils.logWarn('Failed to verify Criteo FastBid');
     return undefined;
