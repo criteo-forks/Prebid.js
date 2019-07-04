@@ -5,6 +5,7 @@ import * as utils from '../src/utils';
 import find from 'core-js/library/fn/array/find';
 import JSEncrypt from 'jsencrypt/bin/jsencrypt';
 import sha256 from 'crypto-js/sha256';
+import { config } from '../src/config';
 
 const ADAPTER_VERSION = 16;
 const BIDDER_CODE = 'criteo';
@@ -46,6 +47,8 @@ export const spec = {
   buildRequests: (bidRequests, bidderRequest) => {
     let url;
     let data;
+
+    Object.assign(bidderRequest, { ceh: config.getConfig('criteo.ceh') });
 
     // If publisher tag not already loaded try to get it from fast bid
     if (!publisherTagAvailable()) {
@@ -238,6 +241,10 @@ function buildCdbRequest(context, bidRequests, bidderRequest) {
   };
   if (networkId) {
     request.publisher.networkid = networkId;
+  }
+  request.user = {};
+  if (bidderRequest && bidderRequest.ceh) {
+    request.user.ceh = bidderRequest.ceh;
   }
   if (bidderRequest && bidderRequest.gdprConsent) {
     request.gdprConsent = {};
