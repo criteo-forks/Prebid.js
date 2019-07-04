@@ -219,7 +219,7 @@ describe('The Criteo bidding adapter', function () {
         }
       });
       const request = spec.buildRequests(bidRequests, bidderRequest);
-      expect(request.data.user).to.be.not.undefined;
+      expect(request.data.user).to.not.be.null;
       expect(request.data.user.ceh).to.equal('hashedemail');
     });
   });
