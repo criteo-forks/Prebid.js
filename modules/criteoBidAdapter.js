@@ -6,7 +6,7 @@ import find from 'core-js/library/fn/array/find';
 import { ajax } from '../src/ajax';
 import Promise from 'promise-polyfill';
 
-export const ADAPTER_VERSION = 17;
+export const ADAPTER_VERSION = 18;
 const BIDDER_CODE = 'criteo';
 const CDB_ENDPOINT = '//bidder.criteo.com/cdb';
 const CRITEO_VENDOR_ID = 91;
