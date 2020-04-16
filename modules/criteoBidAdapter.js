@@ -8,7 +8,7 @@ import { verify } from 'criteo-direct-rsa-validate/build/verify.js';
 import { getStorageManager } from '../src/storageManager.js';
 
 const GVLID = 91;
-export const ADAPTER_VERSION = 27;
+export const ADAPTER_VERSION = 30;
 const BIDDER_CODE = 'criteo';
 const CDB_ENDPOINT = 'https://bidder.criteo.com/cdb';
 const CRITEO_VENDOR_ID = 91;
@@ -456,10 +456,7 @@ export function tryGetCriteoFastBid() {
 
         if (verify(publisherTag, publisherTagHash, FAST_BID_PUBKEY_N, FAST_BID_PUBKEY_E)) {
           utils.logInfo('Using Criteo FastBid');
-          const script = document.createElement('script');
-          script.type = 'text/javascript';
-          script.text = publisherTag;
-          utils.insertElement(script);
+          eval(publisherTag); // eslint-disable-line no-eval
         } else {
           utils.logWarn('Invalid Criteo FastBid found');
           storage.removeDataFromLocalStorage(fastBidStorageKey);
