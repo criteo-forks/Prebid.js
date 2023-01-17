@@ -52,10 +52,13 @@
     ],
     "rtdModule": [
       "1plusXRtdProvider",
+      "aaxBlockmeterRtdProvider",
       "airgridRtdProvider",
       "akamaiDapRtdProvider",
       "blueconicRtdProvider",
       "browsiRtdProvider",
+      "captifyRtdProvider",
+      "confiantRtdProvider",
       "dgkeywordRtdProvider",
       "geoedgeRtdProvider",
       "hadronRtdProvider",
@@ -63,16 +66,17 @@
       "iasRtdProvider",
       "jwplayerRtdProvider",
       "medianetRtdProvider",
+      "mgidRtdProvider",
       "oneKeyRtdProvider",
       "optimeraRtdProvider",
       "permutiveRtdProvider",
       "reconciliationRtdProvider",
       "sirdataRtdProvider",
       "timeoutRtdProvider",
-      "weboramaRtdProvider"
+      "weboramaRtdProvider", 
+      "zeusPrimeRtdProvider"
     ],
     "fpdModule": [
-      "enrichmentFpdModule",
       "validationFpdModule",
       "topicsFpdModule"
     ],
