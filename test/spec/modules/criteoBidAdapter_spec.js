@@ -692,6 +692,33 @@ describe('The Criteo bidding adapter', function () {
       expect(ortbRequest.slots[0].sizes[0]).to.equal('undefinedxundefined');
     });
 
+    it('should map native ortb assets to slot ext assets', function () {
+      const assets = [{
+        id: 1,
+        required: 1,
+        img: {
+          type: 3,
+          w: 150,
+          h: 50,
+        }
+      }];
+      const bidRequests = [
+        {
+          mediaTypes: {
+            native: {
+              ortb: {
+                assets: assets
+              }
+            }
+          },
+          params: {},
+        },
+      ];
+      const request = spec.buildRequests(bidRequests, bidderRequest);
+      const ortbRequest = request.data;
+      expect(ortbRequest.slots[0].ext.assets).to.equal(assets);
+    });
+
     it('should properly detect and forward native flag', function () {
       const bidRequests = [
         {

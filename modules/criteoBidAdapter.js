@@ -439,6 +439,9 @@ function buildCdbRequest(context, bidRequests, bidderRequest) {
       if (bidRequest.params.ext) {
         slot.ext = Object.assign({}, slot.ext, bidRequest.params.ext);
       }
+      if (deepAccess(bidRequest, 'mediaTypes.native.ortb.assets')) {
+        slot.ext = Object.assign({}, slot.ext, {assets: bidRequest.mediaTypes.native.ortb.assets});
+      }
       if (bidRequest.params.publisherSubId) {
         slot.publishersubid = bidRequest.params.publisherSubId;
       }
